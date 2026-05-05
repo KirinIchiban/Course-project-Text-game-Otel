@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="artefacts.fs" />
+    <Compile Include="mechanics.fs" />
+    <Compile Include="plot_functions.fs" />
+    <Compile Include="movements.fs" />
+    <Compile Include="dialogs.fs" />
+    <Compile Include="gameloop.fs" />
+  </ItemGroup>
+</Project>
