@@ -1,6 +1,20 @@
 // Приветствие/диалоги/расследование
 module HotelGame.Dialogs
 
+open System
+open System.IO
+open System.Text.Json
+
+open HotelGame.Types
+open HotelGame.Mechanics
+open HotelGame.Artefacts
+open HotelGame.PlotFunctions
+
+
+let add x lst =
+    match List.contains x lst with
+    | true -> lst
+    | false -> x :: lst
 
 let welcome : Dialog<unit> = dialog {
     do! writeLine "\nОТЕЛЬ 'У ПОГИБШЕГО АЛЬПИНИСТА'"
@@ -50,12 +64,23 @@ let startDialog characterName : Dialog<unit> = dialog {
             RequiredTalks = newRequiredTalks })
 }
 
+let showDialogProgress : Dialog<unit> = dialog {
+    let! state = getState
+    let total = List.length Characters
+    let talked = state.TalkedTo |> Map.toList |> List.length
+    do! writeLine (sprintf "\n[Прогресс опроса: %d/%d]" talked total)
+}
+
 let talkTo characterName : Dialog<Result<string, string>> = dialog {
     let! state = getState
     
     match Map.tryFind characterName state.Characters with
     | Some loc when loc = state.Location ->
         do! startDialog characterName
+        
+        if characterName = "Брюн" && not state.BrunnInterrogated then
+            do! updateState (fun s -> 
+                { s with Characters = s.Characters |> Map.add "Брюн" "Номер дю Барнстокра" })
         
         let dialogText = 
             match characterName with
@@ -96,7 +121,6 @@ let talkTo characterName : Dialog<Result<string, string>> = dialog {
                 госпожа Мозес (пожимая плечами): \"Я всегда запираюсь на ночь. Привычка.\"
                 Диалог заканчивается. Они стоят рядом - странная, идеально невозмутимая пара. Что-то здесь не так. Что-то фундаментально не так."
             | "Брюн" when not state.BrunnInterrogated ->
-                do! updateState (fun s -> { s with Characters = state.Characters |> Map.add "Брюн" "Номер дю Барнстокра" })
                 "Брюн (не снимая черных очков, угрюмо): \"Что вам еще нужно? Оставьте меня в покое. Брюн уходит к дяде.\""
             | "Брюн" ->
                 "Брюн уже у дяди в номере."
@@ -121,10 +145,19 @@ let interrogate characterName : Dialog<Result<string, string>> = dialog {
     
     match Map.tryFind characterName state.Characters with
     | Some loc when loc = state.Location ->
+        // Выполняем побочные эффекты ДО получения текста
+        match characterName with
+        | "Хинкус" when List.contains "Пистолет Люгер" state.Inventory && not state.HinkusConfessed ->
+            do! updateState (fun s -> { s with HinkusConfessed = true })
+        | "Мозес" when not state.MosesInterrogated ->
+            do! updateState (fun s -> { s with MosesInterrogated = true })
+        | "Брюн" when state.Location = "Номер дю Барнстокра" && not state.BrunnInterrogated ->
+            do! updateState (fun s -> { s with BrunnInterrogated = true })
+        | _ -> ()
+
         let interrogateText = 
             match characterName with
             | "Хинкус" when List.contains "Пистолет Люгер" state.Inventory && not state.HinkusConfessed ->
-                do! updateState (fun s -> { s with HinkusConfessed = true })
                 "=== ДОПРОС ХИНКУСА ===\n\n\
                 Вы достаёте пистолет Люгер и кладёте его на стол перед Хинкусом.\n\
                 Глебски: Хватит врать, Филин! Мне все о тебе известно! Ты влип, Филин.\n\
@@ -149,7 +182,6 @@ let interrogate characterName : Dialog<Result<string, string>> = dialog {
             | "Хинкус" ->
                 "Хинкус уже всё рассказал. Он сидит подавленный и молчит."
             | "Мозес" when not state.MosesInterrogated ->
-                do! updateState (fun s -> { s with MosesInterrogated = true })
                 "=== ДОПРОС ГОСПОДИНА МОЗЕСА ===\n\n\
                 Мозес (хрипло, после долгого молчания): \"Всё сложнее, чем вы думаете, инспектор...\"\n\n\
                 Глебски: \"Бросьте эти сказки. Что вы знаете об убийстве?\"\n\
@@ -177,7 +209,6 @@ let interrogate characterName : Dialog<Result<string, string>> = dialog {
             | "Мозес" ->
                 "Мозес молчит, уставившись в свою вечную кружку. Он сказал всё, что мог."
             | "Брюн" when state.Location = "Номер дю Барнстокра" && not state.BrunnInterrogated ->
-                do! updateState (fun s -> { s with BrunnInterrogated = true })
                 "=== Допрос Брюн ===\n\n\
                 Вы резко приказываете: \"Снимите очки!\"\n\
                 Брюн повинуется. Перед вами девушка с заплаканными, но очень красивыми глазами.\n\n\
@@ -229,7 +260,7 @@ let investigate : Dialog<string> = dialog {
                  "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы"]
                 |> List.filter (fun c -> not (List.contains c state.CluesFound))
                 |> String.concat ", "
-            return $"Ещё не все улики найдены. Нужно собрать: {missing}"
+            return ("Ещё не все улики найдены. Нужно собрать: " + missing)
         else
             do! updateState (fun s -> { s with AllCluesCollected = true })
             return "=== АНАЛИЗ УЛИК ===\n\n\
@@ -307,11 +338,12 @@ let finish choice : Dialog<string> = dialog {
              "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы"]
             |> List.filter (fun c -> not (List.contains c state.CluesFound))
             |> String.concat ", "
-        return $"У вас недостаточно улик, чтобы принять решение. Нужно собрать: {missing}"
+        return ("У вас недостаточно улик, чтобы принять решение. Нужно собрать: " + missing)
     else
+        do! updateState (fun s -> { s with CaseInSafe = true })
+
         match choice with
         | "отпустить" when state.MosesInterrogated ->
-            do! updateState (fun s -> { s with CaseInSafe = true })
             return "=== КОНЕЦ: ОТПУСТИТЬ МОЗЕСА ===\n\n\
             Вы решаете помочь. Отдаёте чемодан Луарвику.\n\
             Ночью пришельцы активируют Олафа. Тот встаёт и произносит: \"Система восстановлена.\"\n\
@@ -320,7 +352,6 @@ let finish choice : Dialog<string> = dialog {
             Вам остаётся только составить отчёт о \"неустановленных личностях, скрывшихся в горах\".\n\n\
             Вы спасли не тех, кого привыкли спасать, теперь перед вами гора бумажной работы и верный друг Симонэ."
         | "задержать" ->
-            do! updateState (fun s -> { s with CaseInSafe = true })
             return "=== КОНЕЦ: ЗАДЕРЖАТЬ МОЗЕСА ===\n\n\
             Вы решаете действовать строго по закону. \"Никто не покинет отель до приезда полиции! Чемодан будет в сейфе под охраной.\"\n\n\
             Вы спите в конторе, прислонившись спиной к сейфу. Просыпаетесь от стука.\n\
@@ -340,5 +371,6 @@ let finish choice : Dialog<string> = dialog {
             На снегу - четыре обезображенных тела. Вертолет удаляется вдаль.\n\
             Симонэ смотрит на вас с ненавистью: \"Добился! Добился своего, дубина, убийца!\"\n\n\
             Вы следовали закону, но стали соучастником убийства. Межпланетный контакт не состоялся. Все делали правильно, чисты перед богом, законом и людьми, а совесть болит."
-        | _ -> "Неверный выбор. Введите \"закончить отпустить\" или \"закончить задержать\"."
+        | _ -> 
+            return "Неверный выбор. Введите \"закончить отпустить\" или \"закончить задержать\"."
 }

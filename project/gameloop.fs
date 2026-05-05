@@ -1,12 +1,16 @@
 // Игровой цикл 
 module HotelGame.GameLoop
 
-open HotelGame.Artefacts
+open System
+open System.IO
+open System.Text.Json
+
+open HotelGame.Types
 open HotelGame.Mechanics
+open HotelGame.Artefacts
 open HotelGame.PlotFunctions
 open HotelGame.Movements
 open HotelGame.Dialogs
-
 
 let rec gameLoop () : Dialog<unit> = dialog {
     do! write "\n> "
@@ -22,35 +26,31 @@ let rec gameLoop () : Dialog<unit> = dialog {
         do! goto target >>! (fun () -> look)
 
     | ["взять"; item] ->
-        do! (takeItem item) >>! ignore
-
-    | ["осмотреть"; item] ->
-        do! (examineItem item) >>! (fun text -> writeLine text)
+        do! takeItem item >>! (fun _ -> dialog { return () })
 
     | ["открыть"; door] ->
-        do! (openDoor door) >>! ignore
+        do! openDoor door >>! (fun _ -> dialog { return () })
+
+    | ["осмотреть"; item] ->
+        do! examineItem item >>! (fun text -> writeLine text)
 
     | ["говорить"; character] ->
-        do! (talkTo character) >>! (fun text -> writeLine text)
+        do! talkTo character >>! (fun text -> writeLine text)
 
     | ["допрос"; character] ->
-        do! (interrogate character) >>! (fun text -> writeLine text)
+        do! interrogate character >>! (fun text -> writeLine text)
 
     | ["расследовать"] -> 
         let! text = investigate
         do! writeLine text
 
     | ["закончить"; choiceStr] ->
-        match Int32.TryParse choiceStr with
-        | true, choice ->
-            let! text = finish choice
-            do! writeLine text
-        | _ ->
-            do! writeLine "Введите число: закончить 1 или закончить 2"
+        let! text = finish choiceStr
+        do! writeLine text
 
     | ["сохранить"] -> do! saveGame
     | ["загрузить"] -> 
-        do! loadGame; 
+        do! loadGame
         do! look
     | ["помощь"] -> do! welcome
     | ["остановить"] ->
@@ -63,20 +63,21 @@ let rec gameLoop () : Dialog<unit> = dialog {
     return! gameLoop ()
 }
 
-
-let start () = async {
-    let! _ = dialog {
+let start () : Async<unit> =
+    let game = dialog {
         do! welcome
         do! look
         return! gameLoop ()
-    } initialState
-    printfn "\nИгра завершена."
-}
+    }
+    async {
+        let! (_, _) = game initialState
+        Console.WriteLine "\nИгра завершена."
+    }
 
 [<EntryPoint>]
 let main _ =
-    printfn "Загрузка игры..."
+    Console.WriteLine "Загрузка игры..."
     start() |> Async.RunSynchronously
-    printfn "Нажмите любую клавишу..."
+    Console.WriteLine "\nНажмите любую клавишу..."
     Console.ReadKey() |> ignore
     0

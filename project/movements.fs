@@ -1,11 +1,15 @@
 //  Перемещения/взаимодействия с предметами
 module HotelGame.Movements
 
+open System
+open System.IO
+open System.Text.Json
 
-let add x lst =
-    match List.contains x lst with
-    | true -> lst
-    | false -> x :: lst
+open HotelGame.Types
+open HotelGame.Mechanics
+open HotelGame.Artefacts
+open HotelGame.PlotFunctions
+
 
 let getConnections place state =
     state.Doors
@@ -17,7 +21,8 @@ let isConnected current target state =
     getConnections current state |> List.contains target
 
 let isLocked current target state =
-    state.LockedDoors |> List.contains (current, target) || List.contains (target, current)
+    (state.LockedDoors |> List.contains (current, target)) || 
+    (state.LockedDoors |> List.contains (target, current))
 
 let canGo current target state =
     match () with
@@ -37,10 +42,33 @@ let openDoor door : Dialog<Result<unit, string>> = dialog {
             state.LockedDoors 
             |> List.filter (fun (a, b) -> not ((a = current && b = door) || (a = door && b = current)))
         do! setState { state with LockedDoors = newLockedDoors }
-        do! writeLine $"Вы открыли дверь в {door}"
+        do! writeLine ("Вы открыли дверь в " + door)
         return Ok ()
     else
         return Error "Эта дверь не заперта или её нельзя открыть"
+}
+
+let triggerEvents (place: string) : Dialog<unit> = dialog {
+    let! state = getState
+
+    match place with
+    | "Номер Олафа" ->
+        do! murderSceneEvent
+
+    | "Номер-музей" ->
+        do! hinkleFoundEvent
+
+    | "Крыша" ->
+        let! message = roofDummyEvent
+        do! writeLine ("\n" + message)
+
+    | "Номер Глебски (4)" ->
+        do! glebskiRoomEvent
+        do! museumNoiseEvent
+
+    | _ -> ()
+
+    return ()
 }
 
 let goto (place: string) : Dialog<Result<unit, string>> = dialog {
@@ -68,6 +96,10 @@ let goto (place: string) : Dialog<Result<unit, string>> = dialog {
         return Ok ()
 }
 
+let sequence (dialogs: Dialog<unit> list) : Dialog<unit> = dialog {
+    for d in dialogs do
+        do! d
+}
 
 let getDescription place =
     match Map.tryFind place descriptions with
@@ -86,38 +118,39 @@ let getCluesAt place state =
         then Some (clueToString clue)
         else None)
 
+let getItemsAt place state =
+    state.Items
+    |> Map.toList
+    |> List.choose (fun (item, loc) -> if loc = place then Some item else None)
+
 
 let look : Dialog<unit> = dialog {
     let! state = getState
     let place = state.Location
 
-    do! writeLine $"\n=== {place} ==="
+    do! writeLine ("\n=== " + place + " ===")
     do! writeLine (getDescription place)
 
     match getItemsAt place state with
     | [] -> ()
-    | items -> do! writeLine $"\nПредметы: {String.concat ", " items}"
+    | items -> do! writeLine ("\nПредметы: " + String.concat ", " items)
 
     match getCharactersAt place state with
     | [] -> ()
-    | chars -> do! writeLine $"\nПерсонажи: {String.concat ", " chars}"
+    | chars -> do! writeLine ("\nПерсонажи: " + String.concat ", " chars)
 
     match getCluesAt place state with
     | [] -> ()
     | clues -> 
         do! writeLine $"\n🔍 Возможные улики для осмотра:"
-        clues |> List.iter (fun c -> do! writeLine $"  - {c}")
+        let actions = clues |> List.map (fun c -> writeLine ("  - " + c))
+        do! sequence actions
 
     match getConnections place state with
     | [] -> ()
-    | exits -> do! writeLine $"\nВыходы: {String.concat ", " exits}"
+    | exits -> do! writeLine ("\nВыходы: " + String.concat ", " exits)
 }
 
-
-let getItemsAt place state =
-    state.Items
-    |> Map.toList
-    |> List.choose (fun (item, loc) -> if loc = place then Some item else None)
 
 let takeItem item : Dialog<Result<unit, string>> = dialog {
     let! state = getState
@@ -134,7 +167,7 @@ let takeItem item : Dialog<Result<unit, string>> = dialog {
 
         dialog {
             do! setState { state with Items = newItems; Inventory = newInventory }
-            do! writeLine $"Вы взяли: {item}"
+            do! writeLine ("Вы взяли: " + item)
 
             match item with
             | "Связка ключей" ->
@@ -180,10 +213,10 @@ let examineItem item : Dialog<Result<string, string>> = dialog {
     let! state = getState
     
     let hasItem =
-    List.contains item state.Inventory ||
-    match Map.tryFind item state.Items with
-    | Some loc when loc = state.Location -> true
-    | _ -> false
+        List.contains item state.Inventory ||
+        match Map.tryFind item state.Items with
+        | Some loc when loc = state.Location -> true
+        | _ -> false
 
     match hasItem with
     | false ->
@@ -222,8 +255,7 @@ let examineItem item : Dialog<Result<string, string>> = dialog {
                         OlafSuitcaseExamined = true
                         OlafSuitcaseMoved = true })
 
-                return Ok "Вы открываете чемодан Олафа. Внутри странное устройство — электроника неизвестного назначения.\n
-                Решив, что это может быть важной уликой, вы относите чемодан в свой номер."
+                return Ok "Вы открываете чемодан Олафа. Внутри странное устройство — электроника неизвестного назначения.\nРешив, что это может быть важной уликой, вы относите чемодан в свой номер."
             else
                 return Ok "Вы уже осматривали чемодан."
             
@@ -237,8 +269,9 @@ let showInventory : Dialog<unit> = dialog {
     match state.Inventory with
     | [] -> do! writeLine "Инвентарь пуст"
     | items -> 
-        do! writeLine "📦 Инвентарь:"
-        items |> List.iter (fun item -> do! writeLine $"  - {item}")
+        do! writeLine "Инвентарь:"
+        let actions = items |> List.map (fun item -> writeLine ("  - " + item))
+        do! sequence actions
 }
 
 let showClues : Dialog<unit> = dialog {
@@ -247,5 +280,8 @@ let showClues : Dialog<unit> = dialog {
         do! writeLine "Улики пока не найдены"
     else
         do! writeLine "🔍 Найденные улики:"
-        state.CluesFound |> List.iter (fun clue -> do! writeLine $"  • {clue}")
+        let actions = 
+            state.CluesFound 
+            |> List.map (fun clue -> writeLine ("  • " + clue))
+        do! sequence actions
 }

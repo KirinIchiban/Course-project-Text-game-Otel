@@ -1,6 +1,19 @@
 //  Сюжетные события
 module HotelGame.PlotFunctions
 
+open System
+open System.IO
+open System.Text.Json
+
+open HotelGame.Types
+open HotelGame.Mechanics
+open HotelGame.Artefacts
+
+
+let add x lst =
+    match List.contains x lst with
+    | true -> lst
+    | false -> x :: lst
 
 let runOnce eventName (action: Dialog<unit>) : Dialog<unit> = dialog {
     let! state = getState
@@ -19,7 +32,7 @@ let murderSceneEvent : Dialog<unit> =
             { state with
                 InvestigationStarted = true
                 Characters = state.Characters |> Map.add "Хинкус" "Каминная"
-                Items = state.Items.Add("Пистолет Люгер", "Крыша")
+                Items = state.Items |> Map.add "Пистолет Люгер" "Крыша"
                 LugerAvailable = true
             })
 
@@ -75,7 +88,7 @@ let hinkleFoundEvent : Dialog<unit> =
                     state.CluesFound
                     |> add "Часовая стрелка часов Хинкуса сломана"
                     |> add "Синяки на шее Хинкуса"
-                Characters = state.Characters.Add("Хинкус", "Каминная")
+                Characters = state.Characters |> Map.add "Хинкус" "Каминная"
             })
 
         do! writeLine "\nХинкус найден!"
@@ -90,7 +103,7 @@ let hinkleFoundEvent : Dialog<unit> =
         do! writeLine "Он уходит в каминную за успокоительным бренди. У вас есть отличный шанс заглянуть в его номер и обыскать вещи."
     })
 
-let roofDummyEvent : Dialog<string * bool> = dialog {
+let roofDummyEvent : Dialog<string> = dialog {
     let! state = getState
     let newCount = state.SnowDummyDiscoveryCount + 1
 
@@ -105,14 +118,17 @@ let roofDummyEvent : Dialog<string * bool> = dialog {
   
     let message = 
         match newCount with
-        | 1 -> "ЧТО ЭТО?! На шезлонге сидит Хинкус!\nВы осторожно подходите ближе... но это всего лишь снежное чучело!\n
-            Кто-то сделал его, чтобы создать иллюзию присутствия Хинкуса на крыше.\nУ вас мурашки по коже от этой находки.\ 
-            Кто и зачем это сделал?"
-        | 2 -> "Снежное чучело все еще здесь. При свете дня оно выглядит еще более жутко.\n
-            Кто-то потратил немало времени, чтобы создать такую реалистичную копию.\n
-            Но зачем? Чтобы все думали, что Хинкус был на крыше?"
-        | _ -> "Чучело Хинкуса по-прежнему сидит в шезлонге.\nВы уже привыкли к этому жуткому зрелищу, но вопросы остаются:\nкто и зачем создал эту иллюзию?"
-    
+            | 1 -> "ЧТО ЭТО?! На шезлонге сидит Хинкус!\n\
+            Вы осторожно подходите ближе... но это всего лишь снежное чучело!\n\
+            Кто-то сделал его, чтобы создать иллюзию присутствия Хинкуса на крыше.\n\
+            У вас мурашки по коже от этой находки. Кто и зачем это сделал?"
+            | 2 -> "Снежное чучело все еще здесь. При свете дня оно выглядит еще более жутко.\n\
+                Кто-то потратил немало времени, чтобы создать такую реалистичную копию.\n\
+                Но зачем? Чтобы все думали, что Хинкус был на крыше?"
+            | _ -> "Чучело Хинкуса по-прежнему сидит в шезлонге.\n\
+                Вы уже привыкли к этому жуткому зрелищу, но вопросы остаются:\n\
+                кто и зачем создал эту иллюзию?"
+
     return message
 }
 
@@ -148,47 +164,20 @@ let examineBagEvent : Dialog<unit> =
     })
 
 let examineDummy : Dialog<string> = dialog {
-    let! state = getState
+        let! state = getState
 
-    if state.Location <> "Крыша" then
-        return "Здесь нет чучела"
-    else
-        match state.SnowDummyDiscoveryCount with
-        | 1 -> do! updateState (fun s ->
-                { s with
-                    LugerAvailable = true
-                    CluesFound =
-                        s.CluesFound
-                        |> add "Под шезлонгом найден пистолет Люгер с серебряными пулями" })
-
-            return "Вы внимательно осматриваете чучело. Оно сделано из снега и старой одежды.\n
-                На голове - шляпа Хинкуса. Кто-то знал, во что он был одет.\nЭто не случайность - это тщательно спланированная 
-                инсценировка.\nПод одним из шезлонгов находится пистолет Люгер с серебряными пулями!\n
-                Люгер калибра 0.45 с удлиненной рукоятью. Вот это было настоящее гангстерское оружие.\n
-                Похоже, Хинкус держал его при себе до нападения, но зачем?.."
-
-        | _ ->  return "Чучело начинает подтаивать, но все еще сохраняет форму.\nИнтересно, сколько еще оно простоит?"
-}
-
-let triggerEvents (place: string) : Dialog<unit> = dialog {
-    let! state = getState
-
-    match place with
-    | "Номер Олафа" ->
-        do! murderSceneEvent
-
-    | "Номер-музей" ->
-        do! hinkleFoundEvent
-
-    | "Крыша" ->
-        let! message = roofDummyEvent
-        do! writeLine $"\n{message}"
-
-    | "Номер Глебски (4)" ->
-        do! glebskiRoomEvent
-        do! museumNoiseEvent
-
-    | _ -> ()
-
-    return ()
-}
+        if state.Location <> "Крыша" then
+            return "Здесь нет чучела"
+        else
+            match state.SnowDummyDiscoveryCount with
+            | 1 -> 
+                do! updateState (fun s ->
+                    { s with
+                        LugerAvailable = true
+                        CluesFound =
+                            s.CluesFound
+                            |> add "Под шезлонгом найден пистолет Люгер с серебряными пулями" })
+                return "Вы внимательно осматриваете чучело. Оно сделано из снега и старой одежды.\nНа голове - шляпа Хинкуса. Кто-то знал, во что он был одет.\nЭто не случайность - это тщательно спланированная инсценировка.\nПод одним из шезлонгов находится пистолет Люгер с серебряными пулями!\nЛюгер калибра 0.45 с удлиненной рукоятью. Вот это было настоящее гангстерское оружие.\nПохоже, Хинкус держал его при себе до нападения, но зачем?.."
+            | _ -> 
+                return "Чучело начинает подтаивать, но все еще сохраняет форму.\nИнтересно, сколько еще оно простоит?"
+    }
