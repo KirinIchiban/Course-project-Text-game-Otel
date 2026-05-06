@@ -31,4 +31,5 @@ type GameState = {
     NoteFound : bool
     NoteRead : bool
     MuseumNoiseTriggered : bool
+    SafeHasCase: bool 
 }

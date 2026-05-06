@@ -30,6 +30,10 @@ let rec gameLoop () : Dialog<unit> = dialog {
         let item = String.Join(" ", rest).Trim()
         do! takeItem item >>! (fun _ -> dialog { return () })
 
+    | "положить" :: rest ->
+        let item = String.Join(" ", rest).Trim()
+        do! dropItem item >>! (fun _ -> dialog { return () })
+
     | "открыть" :: rest ->
         let door = String.Join(" ", rest).Trim()
         do! openDoor door >>! (fun _ -> dialog { return () })

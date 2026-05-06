@@ -34,8 +34,19 @@ let canGo current target state =
 let openDoor door : Dialog<Result<unit, string>> = dialog {
     let! state = getState
     let current = state.Location
-    
-    if not (List.contains "Связка ключей" state.Inventory) then
+
+    if door = "Сейф" then
+        if not (List.contains "Ключ от сейфа" state.Inventory) then
+            return Error "У вас нет ключа от сейфа"
+        elif state.Location <> "Контора" then
+            return Error "Здесь нет сейфа"
+        elif state.SafeOpen then
+            return Error "Сейф уже открыт"
+        else
+            do! setState { state with SafeOpen = true }
+            do! writeLine "Вы открыли сейф ключом."
+            return Ok ()
+    elif not (List.contains "Связка ключей" state.Inventory) then
         return Error "У вас нет ключей"
     elif isLocked current door state then
         let newLockedDoors = 
@@ -255,11 +266,47 @@ let examineItem item : Dialog<Result<string, string>> = dialog {
         | "Снежное чучело" when state.Location = "Крыша" ->
             let! message = examineDummy
             return Ok message
+
+        | "Сейф" when state.Location = "Контора" ->
+            if state.SafeOpen then
+                if state.SafeHasCase then
+                    return Ok "В сейфе лежит чемодан Олафа. Он в безопасности."
+                else
+                    return Ok "Сейф открыт и пуст."
+            else
+                return Ok "Массивный железный сейф. Закрыт на ключ."
             
         | _ ->
             return Ok "Ничего особенного не видно"
 }
 
+let dropItem item : Dialog<Result<unit, string>> = dialog {
+    let! state = getState
+
+    match List.contains item state.Inventory with
+    | false ->
+        return Error "У вас нет этого предмета"
+
+    | true ->
+        let newInventory = state.Inventory |> List.filter ((<>) item)
+        let newItems = state.Items |> Map.add item state.Location
+
+        if item = "Чемодан Олафа" && state.Location = "Контора" && state.SafeOpen then
+            let newState = { state with Inventory = newInventory; SafeHasCase = true }
+            do! setState newState
+            do! writeLine "Вы поместили чемодан в сейф. Теперь он в безопасности."
+            do! writeLine "Но за ним нужно приглядеть."
+            
+            do! updateState (fun s -> { s with Characters = s.Characters |> Map.add "Мозес" "Контора" })
+            do! writeLine "\nВнезапно в Контору заходит Мозес, переминаясь с ноги на ногу."
+            do! writeLine "У вас уже накопились вопросы, возможно, его стоит допросить."
+            return Ok ()
+        else
+            let newState = { state with Inventory = newInventory; Items = newItems }
+            do! setState newState
+            do! writeLine ("Вы оставили: " + item)
+            return Ok ()
+}
 
 let showInventory : Dialog<unit> = dialog {
     let! state = getState
