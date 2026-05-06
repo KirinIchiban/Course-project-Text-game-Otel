@@ -55,7 +55,7 @@ let triggerEvents (place: string) : Dialog<unit> = dialog {
     | "Номер Олафа" ->
         do! murderSceneEvent
 
-    | "Номер-музей" ->
+    | "Номер-музей (Погибшего Альпиниста)" ->
         do! hinkleFoundEvent
 
     | "Крыша" ->
@@ -79,7 +79,6 @@ let goto (place: string) : Dialog<Result<unit, string>> = dialog {
         return Error e
 
     | Ok _ ->
-        do! triggerEvents place
 
         do! updateState (fun s ->
             let count =
@@ -91,6 +90,7 @@ let goto (place: string) : Dialog<Result<unit, string>> = dialog {
                 Location = place
                 RoomEnteredCount = Map.add place count s.RoomEnteredCount })
 
+        do! triggerEvents place
         do! autoSave
 
         return Ok ()
@@ -139,13 +139,6 @@ let look : Dialog<unit> = dialog {
     | [] -> ()
     | chars -> do! writeLine ("\nПерсонажи: " + String.concat ", " chars)
 
-    match getCluesAt place state with
-    | [] -> ()
-    | clues -> 
-        do! writeLine $"\n🔍 Возможные улики для осмотра:"
-        let actions = clues |> List.map (fun c -> writeLine ("  - " + c))
-        do! sequence actions
-
     match getConnections place state with
     | [] -> ()
     | exits -> do! writeLine ("\nВыходы: " + String.concat ", " exits)
@@ -175,7 +168,7 @@ let takeItem item : Dialog<Result<unit, string>> = dialog {
 
             | "Записка о Филине" ->
                 do! writeLine "\nСодержание записки:"
-                do! writeLine "\"Инспектору Глебски. В отеле под именем Хинкус скрывается..."
+                do! writeLine "\"Инспектору Глебски. Заберите из номера чемодан и вернитесь сюда"
                 do! writeLine "Примите срочные меры.\""
 
             | _ -> ()
@@ -229,7 +222,7 @@ let examineItem item : Dialog<Result<string, string>> = dialog {
             let! newState = getState
 
             if newState.HinkusBagExamined && not wasExamined then
-                return Ok "Вы открываете баул Хинкуса и находите:\nИ хачем Хинкусу понадобились золотые часы?\n"
+                return Ok "И хачем Хинкусу понадобились золотые часы?\n"
             else
                 return Ok "Баул уже осмотрен"
                 
@@ -255,9 +248,13 @@ let examineItem item : Dialog<Result<string, string>> = dialog {
                         OlafSuitcaseExamined = true
                         OlafSuitcaseMoved = true })
 
-                return Ok "Вы открываете чемодан Олафа. Внутри странное устройство — электроника неизвестного назначения.\nРешив, что это может быть важной уликой, вы относите чемодан в свой номер."
+                return Ok "Вы открываете чемодан Олафа. Внутри странное устройство — электроника неизвестного назначения.\n Возможно, физик Симонэ сможет осмотреть это устройство.\n Решив, что это может быть важной уликой, вы относите чемодан в свой номер."
             else
                 return Ok "Вы уже осматривали чемодан."
+        
+        | "Снежное чучело" when state.Location = "Крыша" ->
+            let! message = examineDummy
+            return Ok message
             
         | _ ->
             return Ok "Ничего особенного не видно"

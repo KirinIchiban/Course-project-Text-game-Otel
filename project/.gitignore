@@ -1,0 +1,19 @@
+# Папки сборки
+bin/
+obj/
+
+*.json
+save.json
+savegame.json
+
+*.tmp
+*.temp
+
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+
+.DS_Store
+Thumbs.db

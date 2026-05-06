@@ -15,36 +15,43 @@ open HotelGame.Dialogs
 let rec gameLoop () : Dialog<unit> = dialog {
     do! write "\n> "
     let! input = readLine
-    let parts = input.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries) |> Array.toList
+    let parts = input.Trim().Split(' ') |> Array.toList
 
     match parts with
     | ["осмотреться"] -> do! look
     | ["инвентарь"] -> do! showInventory
     | ["улики"] -> do! showClues  
 
-    | ["идти"; target] ->
+    | "идти" :: rest ->
+        let target = String.Join(" ", rest).Trim()
         do! goto target >>! (fun () -> look)
 
-    | ["взять"; item] ->
+    | "взять" :: rest ->
+        let item = String.Join(" ", rest).Trim()
         do! takeItem item >>! (fun _ -> dialog { return () })
 
-    | ["открыть"; door] ->
+    | "открыть" :: rest ->
+        let door = String.Join(" ", rest).Trim()
         do! openDoor door >>! (fun _ -> dialog { return () })
 
-    | ["осмотреть"; item] ->
+    | "осмотреть" :: rest ->
+        let item = String.Join(" ", rest).Trim()
         do! examineItem item >>! (fun text -> writeLine text)
 
-    | ["говорить"; character] ->
+    | "говорить" :: rest ->
+        let character = String.Join(" ", rest).Trim()
         do! talkTo character >>! (fun text -> writeLine text)
 
-    | ["допрос"; character] ->
+    | "допрос" :: rest ->
+        let character = String.Join(" ", rest).Trim()
         do! interrogate character >>! (fun text -> writeLine text)
 
     | ["расследовать"] -> 
         let! text = investigate
         do! writeLine text
 
-    | ["закончить"; choiceStr] ->
+    | "закончить" :: rest ->
+        let choiceStr = String.Join(" ", rest).Trim()
         let! text = finish choiceStr
         do! writeLine text
 
