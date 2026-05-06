@@ -122,13 +122,6 @@ let getCharactersAt place state =
     |> Map.toList
     |> List.choose (fun (c, loc) -> if loc = place then Some c else None)
 
-let getCluesAt place state =
-    allClues
-    |> List.choose (fun (clue, loc) ->
-        if loc = place && not (List.contains (clueToString clue) state.CluesFound)
-        then Some (clueToString clue)
-        else None)
-
 let getItemsAt place state =
     state.Items
     |> Map.toList
@@ -275,6 +268,27 @@ let examineItem item : Dialog<Result<string, string>> = dialog {
                     return Ok "Сейф открыт и пуст."
             else
                 return Ok "Массивный железный сейф. Закрыт на ключ."
+        
+        | "Записка" when state.Location = "Номер дю Барнстокра" ->
+            if not (List.contains "Записка дю Барнстокра" state.CluesFound) then
+                do! updateState (fun s ->
+                    { s with
+                        CluesFound = "Записка дю Барнстокра" :: s.CluesFound
+                    })
+                return Ok (
+                    [
+                        "Вы осматриваете записку. На ней написано:"
+                        ""
+                        "\"Мы вас нашли. Я держу вас на мушке."
+                        "Не пытайтесь бежать и не делайте глупостей."
+                        "Стрелять буду без предупреждения. Ф.\""
+                        ""
+                        "🔍 Обнаружена улика: Записка с угрозой"
+                    ]
+                    |> String.concat "\n"
+                )
+            else
+                return Ok "Вы уже читали эту записку."
             
         | _ ->
             return Ok "Ничего особенного не видно"
@@ -297,7 +311,8 @@ let dropItem item : Dialog<Result<unit, string>> = dialog {
             do! writeLine "Вы поместили чемодан в сейф. Теперь он в безопасности."
             do! writeLine "Но за ним нужно приглядеть."
             
-            do! updateState (fun s -> { s with Characters = s.Characters |> Map.add "Мозес" "Контора" })
+            do! updateState (fun s -> 
+                { s with Characters = s.Characters |> Map.add "Мозес" "Контора" })
             do! writeLine "\nВнезапно в Контору заходит Мозес, переминаясь с ноги на ногу."
             do! writeLine "У вас уже накопились вопросы, возможно, его стоит допросить."
             return Ok ()

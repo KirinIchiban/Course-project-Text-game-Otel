@@ -1,4 +1,6 @@
-dotnet run --project build.fsproj
+#!/bin/bash
+
+cat > commands.txt << 'EOF'
 идти Контора
 взять Связка ключей
 идти Холл
@@ -61,31 +63,10 @@ dotnet run --project build.fsproj
 открыть Сейф
 положить Чемодан Олафа
 допрос Мозес
+расследовать
+закончить отпустить
+EOF
 
-let allClues : (Clue * string) list = [
-    (BrokenWatchHand, "Номер-музей (Погибшего Альпиниста)")
-    (BruisesOnNeck, "Номер-музей (Погибшего Альпиниста)")
-    (ChemicalSmell, "Номер Олафа")
-    (OpenWindow, "Номер Олафа")
-    (SnowDummy, "Крыша")
-    (ThreatNote, "Номер дю Барнстокра")
-    (MissingGoldWatch, "Номер Хинкуса")
-]
+cat commands.txt | dotnet run --project build.fsproj > output.txt 2>&1
 
-let clueToString clue =
-    match clue with
-    | BrokenWatchHand -> "Часовая стрелка часов Хинкуса сломана"
-    | BruisesOnNeck -> "Синяки на шее Хинкуса"
-    | ChemicalSmell -> "Химический запах изо рта Олафа"
-    | OpenWindow -> "Открытое окно в комнате Олафа"
-    | SnowDummy -> "Снежное чучело Хинкуса на крыше"
-    | MissingGoldWatch -> "Пропавшие золотые часы"
-    | ThreatNote -> "Записка дю Барнстокра"
-    
-    let getCluesAt place state =
-    allClues
-    |> List.choose (fun (clue, loc) ->
-        if loc = place && not (List.contains (clueToString clue) state.CluesFound)
-        then Some (clueToString clue)
-        else None)
-
+echo "Готово! Результат в output.txt"

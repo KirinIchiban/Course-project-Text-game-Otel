@@ -85,6 +85,28 @@ let showDialogProgress : Dialog<unit> = dialog {
     do! writeLine (sprintf "\n[Прогресс опроса: %d/%d]" talked total)
 }
 
+let checkAllCluesFound : Dialog<string option> = dialog {
+    let! state = getState
+    let allClueNames = 
+        ["Химический запах изо рта Олафа"; "Открытое окно в комнате Олафа"; 
+         "Часовая стрелка часов Хинкуса сломана"; "Синяки на шее Хинкуса"; 
+         "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы Мозеса";
+         "Записка дю Барнстокра"; "Под шезлонгом найден пистолет Люгер с серебряными пулями"]
+    
+    let allFound = 
+        allClueNames |> List.forall (fun c -> List.contains c state.CluesFound)
+    
+    if not allFound then
+        let missing = 
+            allClueNames
+            |> List.filter (fun c -> not (List.contains c state.CluesFound))
+            |> String.concat ", "
+        return Some ("Ещё не все улики найдены. Нужно собрать: " + missing)
+    else
+        do! updateState (fun s -> { s with AllCluesCollected = true })
+        return None
+}
+
 let talkTo characterName : Dialog<Result<string, string>> = dialog {
     let! state = getState
     
@@ -132,8 +154,11 @@ let talkTo characterName : Dialog<Result<string, string>> = dialog {
                 Глебски: \"И что ты сделал?\"\n\
                 Симонэ (растерянно): \"Я... я испугался. Закрыл дверь и ушёл. Но потом подумал...\"\n\
                 Симонэ (умоляюще): \"Проверь! Сходи в её номер! Дверь заперта, но у тебя же ключи!\"\n\
-                Глебски вздыхает. \"Хорошо, проверю.\"\n"
-            | "Мозес" ->
+                Глебски вздыхает. \"Хорошо, проверю. Только посмотрите на чемодан нашего мистера Олафа, вы в этом больше понимаете.\"\n\
+                Симонэ: \"Видите эти провода и конденсаторы? Это не просто прибор, похоже на какую-то систему охлаждения и блок питания.\"\n\
+                Симонэ: \"Детали подписаны на языке, которого я не знаю. Больше ничего сказать не могу.\"\n\
+                Симонэ: \"Лучше отнесите его в сейф в Конторе для сохранности.\"\n"
+            | "Госпожа Мозес" ->
                 "Вы входите в номер. Оба Мозеса стоят вместе - он мрачный и замкнутый, она... госпожа Мозес выглядит совершенно нормально.\n\
                 Никаких признаков... ну, того, о чём говорил Симонэ.\n\
                 Глебски (резко): \"Госпожа Мозес. Мне сказали, что вы... что с вами случилось что-то.\"\n\
@@ -145,15 +170,18 @@ let talkTo characterName : Dialog<Result<string, string>> = dialog {
                 Глебски чувствует, что ему лгут. Но как? И зачем? \"Почему тогда ваша дверь была заперта изнутри?\" - не сдаётся он.\n\
                 госпожа Мозес (пожимая плечами): \"Я всегда запираюсь на ночь. Привычка.\"\n\
                 Диалог заканчивается. Они стоят рядом - странная, идеально невозмутимая пара. Что-то здесь не так.\n\
+                Мозес встает и куда-то уходит\n\
                 Что-то фундаментально не так.\n"
             | "Брюн" when not state.BrunnInterrogated ->
                 "Брюн (не снимая черных очков, угрюмо): \"Что вам еще нужно? Оставьте меня в покое. Брюн уходит к дяде.\""
             | "Брюн" ->
                 "Брюн уже у дяди в номере."
             | "дю Барнстокр" when state.BrunnInterrogated ->
-                "дю Барнстокр (сокрушенно): \"Дорогой инспектор! Я, конечно, понятия не имел... Дети растут. Ужасно растут.\""
+                "дю Барнстокр (сокрушенно): \"Дорогой инспектор! Я, конечно, понятия не имел... Дети растут. Ужасно растут.\n\
+                Кто-то оставил у меня пренеприятное послание, записка с ним лежит на столе, шутка ли.\""
             | "дю Барнстокр" ->
-                "дю Барнстокр (вяло): \"А? О чем речь? Брюн? Она отдыхает. Не тревожьте её, прошу вас.\""
+                "дю Барнстокр (вяло): \"А? О чем речь? Брюн? Она отдыхает. Не тревожьте её, прошу вас.\
+                Кто-то оставил у меня пренеприятное послание, записка с ним лежит на столе, шутка ли.\""
             | _ -> "Персонаж что-то бормочет, но вы не можете разобрать слов."
         
         do! showDialogProgress
@@ -171,19 +199,21 @@ let interrogate characterName : Dialog<Result<string, string>> = dialog {
     
     match Map.tryFind characterName state.Characters with
     | Some loc when loc = state.Location ->
-        // Выполняем побочные эффекты ДО получения текста
         match characterName with
         | "Хинкус" when List.contains "Пистолет Люгер" state.Inventory && not state.HinkusConfessed ->
             do! updateState (fun s -> { s with HinkusConfessed = true })
-        | "Мозес" when state.AllCluesCollected && state.SafeHasCase && not state.MosesInterrogated ->
-            do! updateState (fun s -> { s with MosesInterrogated = true })
+        | "Мозес" when not state.MosesInterrogated ->
+            let! _ = checkAllCluesFound
+            let! newState = getState
+            if newState.AllCluesCollected && newState.SafeHasCase then
+                do! updateState (fun s -> { s with MosesInterrogated = true })
         | "Брюн" when state.Location = "Номер дю Барнстокра" && not state.BrunnInterrogated ->
             do! updateState (fun s -> { s with BrunnInterrogated = true })
         | _ -> ()
 
         let interrogateText = 
             match characterName with
-            | "Хинкус" when List.contains "Пистолет Люгер" state.Inventory && not state.HinkusConfessed ->
+            | "Хинкус" when List.contains "Пистолет Люгер" state.Inventory && List.contains "Записка дю Барнстокра" state.CluesFound && not state.HinkusConfessed ->
                 "=== ДОПРОС ХИНКУСА ===\n\n\
                 Вы достаёте пистолет Люгер и кладёте его на стол перед Хинкусом.\n\
                 Глебски: Хватит врать, Филин! Мне все о тебе известно! Ты влип, Филин.\n\
@@ -200,7 +230,7 @@ let interrogate characterName : Dialog<Result<string, string>> = dialog {
                 Он оборотень, колдун! Серебряные пули — единственное, что может его остановить!\n\
                 Он всегда действовал с напарницей, а Олафа я увидел вчера впервые, он никогда и не был моей целью.\"\n\
                 Он явно напуган."
-            | "Хинкус" when not (List.contains "Пистолет Люгер" state.Inventory) ->
+            | "Хинкус" when not (List.contains "Пистолет Люгер" state.Inventory) && not (List.contains "Записка дю Барнстокра" state.CluesFound) ->
                 "Вы пытаетесь допросить Хинкуса, но он лишь бормочет что-то невнятное.\n\
                 Хинкус (дрожа): \"Не знаю я ничего... Отстаньте...\"\n\
                 Он явно напуган, но у вас нет доказательств, чтобы прижать доброго гражданина.\n\
@@ -277,23 +307,10 @@ let investigate : Dialog<string> = dialog {
     elif state.Location <> "Контора" then
         return "Переместитесь в Контору и охраняйте сейф, чтобы его не вскрыли. Там можно еще раз все проанализировать."
     else
-        let allCluesFound = 
-            ["Химический запах изо рта Олафа"; "Открытое окно в комнате Олафа"; 
-             "Часовая стрелка часов Хинкуса сломана"; "Синяки на шее Хинкуса"; 
-             "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы Мозеса"]
-            |> List.forall (fun c -> List.contains c state.CluesFound)
-        
-        if not allCluesFound then
-            let missing = 
-                ["Химический запах изо рта Олафа"; "Открытое окно в комнате Олафа"; 
-                 "Часовая стрелка часов Хинкуса сломана"; "Синяки на шее Хинкуса"; 
-                 "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы Мозеса"]
-                |> List.filter (fun c -> not (List.contains c state.CluesFound))
-                |> String.concat ", "
-            return ("Ещё не все улики найдены. Нужно собрать: " + missing)
-        else
-            do! updateState (fun s -> { s with AllCluesCollected = true })
-            return "=== АНАЛИЗ УЛИК ===\n\n\
+        let! result = checkAllCluesFound
+        match result with
+        | Some msg -> return msg
+        | None -> return "=== АНАЛИЗ УЛИК ===\n\n\
             Все улики собраны!\n\n\
             ВЫВОДЫ:\n\
             1. Убийца не призрак - были мокрые следы\n\
@@ -365,7 +382,8 @@ let finish choice : Dialog<string> = dialog {
         let missing = 
             ["Химический запах изо рта Олафа"; "Открытое окно в комнате Олафа"; 
              "Часовая стрелка часов Хинкуса сломана"; "Синяки на шее Хинкуса"; 
-             "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы"]
+             "Снежное чучело Хинкуса на крыше"; "Пропавшие золотые часы";
+             "Записка дю Барнстокра"]
             |> List.filter (fun c -> not (List.contains c state.CluesFound))
             |> String.concat ", "
         return ("У вас недостаточно улик, чтобы принять решение. Нужно собрать: " + missing)

@@ -13,8 +13,8 @@ open HotelGame.Movements
 open HotelGame.Dialogs
 
 let rec gameLoop () : Dialog<unit> = dialog {
-    do! write "\n> "
-    let! input = readLine
+    do! write "\n> " 
+    let! input = readLine 
     let parts = input.Trim().Split(' ') |> Array.toList
 
     match parts with
@@ -58,6 +58,7 @@ let rec gameLoop () : Dialog<unit> = dialog {
         let choiceStr = String.Join(" ", rest).Trim()
         let! text = finish choiceStr
         do! writeLine text
+        return ()
 
     | ["сохранить"] -> do! saveGame
     | ["загрузить"] -> 
